@@ -1,7 +1,8 @@
 export enum EntityType {
     Unit,
     Building,
-    Resource
+    Resource,
+    Projectile
 }
 
 export interface Vector2 {
@@ -15,6 +16,9 @@ export abstract class Entity {
     size: number = 32;
     color: string = '#fff';
     selected: boolean = false;
+
+    health: number = 100;
+    maxHealth: number = 100;
 
     constructor(x: number, y: number) {
         this.id = crypto.randomUUID();

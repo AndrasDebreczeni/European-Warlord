@@ -5,3 +5,4 @@ export * from './ResourceNode';
 export * from './TownCenter';
 export * from './Barracks';
 export * from './Farm';
+export * from './Projectile';

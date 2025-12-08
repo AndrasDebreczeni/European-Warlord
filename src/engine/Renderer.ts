@@ -77,5 +77,27 @@ export class Renderer {
             this._ctx.lineWidth = 2;
             this._ctx.strokeRect(screenX, screenY, entity.size, entity.size);
         }
+
+        // Draw Health Bar
+        if (entity.maxHealth && entity.health < entity.maxHealth) {
+            const barWidth = entity.size;
+            const barHeight = 4;
+            const barX = screenX;
+            const barY = screenY - 8;
+
+            // Background
+            this._ctx.fillStyle = '#ef4444'; // Red-500
+            this._ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Health
+            const percent = Math.max(0, entity.health / entity.maxHealth);
+            this._ctx.fillStyle = '#22c55e'; // Green-500
+            this._ctx.fillRect(barX, barY, barWidth * percent, barHeight);
+
+            // Border (optional, keeps it clean)
+            // this._ctx.strokeStyle = '#000';
+            // this._ctx.lineWidth = 1;
+            // this._ctx.strokeRect(barX, barY, barWidth, barHeight);
+        }
     }
 }

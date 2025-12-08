@@ -8,9 +8,9 @@ export interface Resources {
 
 export class GameState {
     resources: Resources = {
-        gold: 100,
-        wood: 100,
-        food: 100
+        gold: 1000,
+        wood: 1000,
+        food: 1000
     };
 
     entities: Entity[] = [];

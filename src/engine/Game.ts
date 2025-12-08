@@ -2,8 +2,9 @@ import { GameLoop } from './GameLoop';
 import { InputHandler } from './InputHandler';
 import { Renderer, Camera } from './Renderer';
 import { GameState } from './GameState';
-import { Entity, Unit, ResourceNode, ResourceType, TownCenter, Barracks, Farm } from './entities';
+import { Entity, Unit, ResourceNode, ResourceType, TownCenter, Barracks, Farm, Building } from './entities';
 import { BuildingType, BuildingStats, BuildingCosts } from './data/BuildingRules';
+import { UnitType, UnitCosts } from './data/UnitRules';
 
 export class Game {
     loop: GameLoop;
@@ -25,7 +26,6 @@ export class Game {
 
         // Add test unit
         const u = new Unit(100, 100);
-        u.color = '#3b82f6'; // Blue
         this.state.addEntity(u);
 
         // Add Resources
@@ -71,7 +71,7 @@ export class Game {
 
         const cost = BuildingCosts[this.placementBuildingType];
 
-        // Check resources
+        // Check resources - Naive check, should move to better resource manager later
         if (this.state.resources.gold >= cost.gold &&
             this.state.resources.wood >= cost.wood &&
             this.state.resources.food >= cost.food) {
@@ -98,6 +98,24 @@ export class Game {
             }
         } else {
             console.log("Not enough resources!");
+        }
+    }
+
+    trainUnit(building: Building, unitType: UnitType) {
+        const cost = UnitCosts[unitType];
+
+        if (this.state.resources.gold >= cost.gold &&
+            this.state.resources.wood >= cost.wood &&
+            this.state.resources.food >= cost.food) {
+
+            this.state.resources.gold -= cost.gold;
+            this.state.resources.wood -= cost.wood;
+            this.state.resources.food -= cost.food;
+
+            building.queueUnit(unitType);
+            console.log(`Queued ${unitType} at ${building.type}`);
+        } else {
+            console.log("Not enough resources to train unit");
         }
     }
 
@@ -143,8 +161,12 @@ export class Game {
                 this.state.selection.forEach(id => {
                     const entity = this.state.entities.find(e => e.id === id);
                     if (entity && entity instanceof Unit) {
-                        if (target && target instanceof ResourceNode) {
-                            entity.gather(target);
+                        if (target && target.id !== entity.id) {
+                            if (target instanceof ResourceNode) {
+                                entity.gather(target);
+                            } else if (target instanceof Unit || target instanceof Building) {
+                                entity.attackEntity(target);
+                            }
                         } else {
                             entity.moveTo(worldX, worldY);
                         }
