@@ -12,6 +12,7 @@ function App() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const gameRef = useRef<Game | null>(null)
     const [resources, setResources] = useState({ gold: 0, wood: 0, food: 0, iron: 0, stone: 0 })
+    const [population, setPopulation] = useState({ current: 0, max: 0 })
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null)
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null)
 
@@ -33,6 +34,7 @@ function App() {
             if (gameRef.current) {
                 // We create a new object to ensure React detects the change
                 setResources({ ...gameRef.current.state.resources })
+                setPopulation({ ...gameRef.current.state.population })
 
                 // Handle Selection for UI
                 const selection = gameRef.current.state.selection
@@ -101,6 +103,10 @@ function App() {
                 <div className="flex items-center gap-2">
                     <span className="text-stone-400 font-bold">Stone:</span>
                     <span>{Math.floor(resources.stone)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-violet-400 font-bold">Population:</span>
+                    <span>{population.current}/{population.max}</span>
                 </div>
             </div>
 

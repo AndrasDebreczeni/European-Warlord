@@ -10,7 +10,7 @@ export enum ResourceType {
 
 export class ResourceNode extends Entity {
     type = EntityType.Resource;
-    amount: number = 1000;
+    amount: number = 10000;
 
     constructor(x: number, y: number, public resourceType: ResourceType) {
         super(x, y);

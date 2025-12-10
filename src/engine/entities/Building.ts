@@ -4,6 +4,7 @@ import { Unit } from './Unit';
 
 export class Building extends Entity {
     type = EntityType.Building;
+    buildingType: string = 'Building'; // Specific building type name
     isConstructed: boolean = true;
 
     // Production

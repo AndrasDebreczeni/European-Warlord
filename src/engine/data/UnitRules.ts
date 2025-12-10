@@ -15,23 +15,23 @@ export enum UnitType {
     Berserker = 'Berserker' // Shock Inf
 }
 
-export const UnitCosts: Record<UnitType, { gold: number; wood: number; food: number; time: number }> = {
-    [UnitType.Villager]: { gold: 0, wood: 0, food: 50, time: 2 },
+export const UnitCosts: Record<UnitType, { gold: number; wood: number; food: number; stone: number; time: number }> = {
+    [UnitType.Villager]: { gold: 0, wood: 0, food: 50, stone: 0, time: 2 },
 
     // West
-    [UnitType.Swordsman]: { gold: 20, wood: 0, food: 60, time: 4 },
-    [UnitType.Archer]: { gold: 45, wood: 25, food: 0, time: 5 },
-    [UnitType.Knight]: { gold: 75, wood: 0, food: 60, time: 7 },
+    [UnitType.Swordsman]: { gold: 20, wood: 0, food: 60, stone: 0, time: 4 },
+    [UnitType.Archer]: { gold: 45, wood: 25, food: 0, stone: 0, time: 5 },
+    [UnitType.Knight]: { gold: 75, wood: 0, food: 60, stone: 0, time: 9 },
 
     // East
-    [UnitType.Lancer]: { gold: 60, wood: 0, food: 50, time: 6 },
-    [UnitType.HorseArcher]: { gold: 50, wood: 40, food: 0, time: 6 },
-    [UnitType.Marauder]: { gold: 10, wood: 0, food: 40, time: 3 },
+    [UnitType.Lancer]: { gold: 60, wood: 0, food: 50, stone: 0, time: 7 },
+    [UnitType.HorseArcher]: { gold: 50, wood: 40, food: 0, stone: 0, time: 7 },
+    [UnitType.Marauder]: { gold: 10, wood: 0, food: 40, stone: 0, time: 3 },
 
     // North
-    [UnitType.Huscarl]: { gold: 30, wood: 10, food: 50, time: 5 },
-    [UnitType.Axethrower]: { gold: 30, wood: 30, food: 0, time: 5 },
-    [UnitType.Berserker]: { gold: 40, wood: 0, food: 50, time: 4 },
+    [UnitType.Huscarl]: { gold: 30, wood: 0, food: 50, stone: 0, time: 5 },
+    [UnitType.Axethrower]: { gold: 30, wood: 30, food: 0, stone: 0, time: 5 },
+    [UnitType.Berserker]: { gold: 40, wood: 0, food: 50, stone: 0, time: 6 },
 };
 
 export const UnitStats: Record<UnitType, { maxHealth: number; speed: number; attack: number; range: number; armor: number; attackCooldown: number }> = {

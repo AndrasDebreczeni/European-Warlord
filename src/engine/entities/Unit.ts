@@ -266,6 +266,7 @@ export class Unit extends Entity {
                         if (collisionMap) {
                             const path = Pathfinder.findPath(this.position, closest.position, collisionMap);
                             this.setPath(path);
+                            this.state = UnitState.Returning;
                         }
                     } else {
                         this.state = UnitState.Idle; // No dropoff
@@ -276,79 +277,69 @@ export class Unit extends Entity {
 
         // Returning Logic
         if (this.state === UnitState.Returning && this.targetEntity) {
-            // If we don't have a path/targetPos, try to find one
-            if ((!this.path || this.path.length === 0) && !this.targetPos && collisionMap) {
-                const path = Pathfinder.findPath(this.position, this.targetEntity.position, collisionMap);
-                this.setPath(path);
-            }
+            const target = this.targetEntity;
+            const buffer = 5;
 
-            // Re-use logic for path following if we have a path
-            if (this.path.length > 0 || this.targetPos) {
-                // This falls through to the Movement Logic block above because state is Returning?
-                // No, Movement Logic block checks `this.state === UnitState.Moving`.
-                // I should change that check to include `Returning`.
+            // Check if touching (AABB with buffer)
+            const touching =
+                this.position.x < target.position.x + target.size + buffer &&
+                this.position.x + this.size > target.position.x - buffer &&
+                this.position.y < target.position.y + target.size + buffer &&
+                this.position.y + this.size > target.position.y - buffer;
+
+            if (touching) {
+                // Arrived at Town Center -> Deposit
+                if (this.carriedResourceType !== null) {
+                    switch (this.carriedResourceType) {
+                        case ResourceType.Gold: gameState.resources.gold += this.currentLoad; break;
+                        case ResourceType.Wood: gameState.resources.wood += this.currentLoad; break;
+                        case ResourceType.Food: gameState.resources.food += this.currentLoad; break;
+                        case ResourceType.Iron: gameState.resources.iron += this.currentLoad; break;
+                        case ResourceType.Stone: gameState.resources.stone += this.currentLoad; break;
+                    }
+                    console.log(`Deposited ${this.currentLoad}!`);
+                }
+
+                this.currentLoad = 0;
+                this.carriedResourceType = null;
+
+                // Return to work!
+                if (this.lastGatherTarget && this.lastGatherTarget.amount > 0) {
+                    this.gather(this.lastGatherTarget);
+                    // Need to calculate path back!
+                    if (collisionMap) {
+                        const path = Pathfinder.findPath(this.position, this.lastGatherTarget.position, collisionMap);
+                        if (path && path.length > 0) {
+                            this.setPath(path);
+                        } else {
+                            // If path blocked, just idle
+                            this.state = UnitState.Idle;
+                            this.lastGatherTarget = null;
+                        }
+                    }
+                } else {
+                    this.state = UnitState.Idle;
+                    this.targetPos = null;
+                    this.targetEntity = null;
+                    this.lastGatherTarget = null;
+                }
             } else {
-                // Fallback: Update targetPos to closest point for the main movement logic to use
-                const target = this.targetEntity;
+                // Not touching yet
                 const closestX = Math.max(target.position.x, Math.min(this.position.x, target.position.x + target.size));
                 const closestY = Math.max(target.position.y, Math.min(this.position.y, target.position.y + target.size));
-                this.targetPos = { x: closestX, y: closestY };
 
-                // Logic for arrival
-                const dx = this.targetPos.x - this.position.x;
-                const dy = this.targetPos.y - this.position.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                // AABB Check with buffer
-                const buffer = 5; // Reach distance
-                const touching =
-                    this.position.x < target.position.x + target.size + buffer &&
-                    this.position.x + this.size > target.position.x - buffer &&
-                    this.position.y < target.position.y + target.size + buffer &&
-                    this.position.y + this.size > target.position.y - buffer;
-
-                // Debugging
-                // console.log(`Returning: Dist=${dist.toFixed(1)}, Touching=${touching}, Pos=(${this.position.x.toFixed(0)},${this.position.y.toFixed(0)}) Target=(${target.position.x},${target.position.y})`);
-
-                if (touching || dist < 5) {
-                    // Arrived at Town Center
-                    if (this.carriedResourceType !== null) {
-                        switch (this.carriedResourceType) {
-                            case ResourceType.Gold: gameState.resources.gold += this.currentLoad; break;
-                            case ResourceType.Wood: gameState.resources.wood += this.currentLoad; break;
-                            case ResourceType.Food: gameState.resources.food += this.currentLoad; break;
-                            case ResourceType.Iron: gameState.resources.iron += this.currentLoad; break;
-                            case ResourceType.Stone: gameState.resources.stone += this.currentLoad; break;
-                        }
-                        console.log(`Deposited ${this.currentLoad}!`);
-                    }
-
-                    this.currentLoad = 0;
-                    this.carriedResourceType = null;
-
-                    // Return to work!
-                    if (this.lastGatherTarget && this.lastGatherTarget.amount > 0) {
-                        this.gather(this.lastGatherTarget);
-                        // Need to calculate path back!
-                        if (collisionMap) {
-                            const path = Pathfinder.findPath(this.position, this.lastGatherTarget.position, collisionMap);
-                            if (path.length > 0) {
-                                this.setPath(path);
-                            } else {
-                                console.log("No path found back to resource");
-                                this.state = UnitState.Idle;
-                                this.lastGatherTarget = null;
-                            }
-                        }
-                    } else {
-                        this.state = UnitState.Idle;
-                        this.targetPos = null;
-                        this.targetEntity = null;
-                        this.lastGatherTarget = null;
-                    }
+                // If we don't have a path/targetPos, try to find one
+                if ((!this.path || this.path.length === 0) && !this.targetPos && collisionMap) {
+                    // Target the closest border point, not top-left
+                    const path = Pathfinder.findPath(this.position, { x: closestX, y: closestY }, collisionMap);
+                    this.setPath(path);
+                    this.state = UnitState.Returning;
                 }
-                // Else: Do NOTHING here. Let the Movement Logic block (above) handle the movement to `this.targetPos`.
-                // We successfully updated `this.targetPos` at the start of this block.
+
+                // Fallback: If still no path (Pathfinder failed or near), use direct approach
+                if ((!this.path || this.path.length === 0) && !this.targetPos) {
+                    this.targetPos = { x: closestX, y: closestY };
+                }
             }
         }
     }

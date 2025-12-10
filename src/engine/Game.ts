@@ -2,7 +2,7 @@ import { GameLoop } from './GameLoop';
 import { InputHandler } from './InputHandler';
 import { Renderer, Camera } from './Renderer';
 import { GameState } from './GameState';
-import { Entity, Unit, ResourceNode, ResourceType, TownCenter, Barracks, Farm, Building } from './entities';
+import { Entity, Unit, ResourceNode, ResourceType, TownCenter, Barracks, House, Tower, Wall, Building } from './entities';
 import { BuildingType, BuildingStats, BuildingCosts } from './data/BuildingRules';
 import { UnitType, UnitCosts } from './data/UnitRules';
 import { Pathfinder } from './Pathfinder';
@@ -14,9 +14,13 @@ export class Game {
     camera: Camera;
     state: GameState;
 
+
+
     // Building Placement
     placementMode: boolean = false;
     placementBuildingType: BuildingType | null = null;
+    placementStart: { x: number, y: number } | null = null;
+    private wasMouseDown: boolean = false;
 
     constructor(private canvas: HTMLCanvasElement) {
         this.camera = new Camera(canvas.width, canvas.height);
@@ -28,6 +32,7 @@ export class Game {
         // Add test unit
         const u = new Unit(100, 100);
         this.state.addEntity(u);
+        this.state.population.current++; // Count initial unit
 
         // Add Resources
         this.state.addEntity(new ResourceNode(300, 300, ResourceType.Gold));
@@ -68,36 +73,59 @@ export class Game {
     cancelPlacement() {
         this.placementMode = false;
         this.placementBuildingType = null;
+        this.placementStart = null;
     }
 
     private placeBuilding(x: number, y: number) {
         if (!this.placementBuildingType) return;
 
+
+        if (this.placementBuildingType === BuildingType.Wall && this.placementStart) {
+            // Wall Drag Logic
+            this.placeWallSegment(this.placementStart.x, this.placementStart.y, x, y);
+            this.placementStart = null; // Reset start after placement
+            if (!this.input.isKeyPressed('ShiftLeft')) {
+                this.cancelPlacement();
+            }
+            return;
+        }
+
+        // Single Building Placement
         const cost = BuildingCosts[this.placementBuildingType];
 
         // Check resources - Naive check, should move to better resource manager later
         if (this.state.resources.gold >= cost.gold &&
             this.state.resources.wood >= cost.wood &&
-            this.state.resources.food >= cost.food) {
+            this.state.resources.food >= cost.food &&
+            this.state.resources.stone >= cost.stone) {
 
             // Deduct resources
             this.state.resources.gold -= cost.gold;
             this.state.resources.wood -= cost.wood;
             this.state.resources.food -= cost.food;
+            this.state.resources.stone -= cost.stone;
 
             // Create building
             let building: Entity;
             switch (this.placementBuildingType) {
                 case BuildingType.TownCenter: building = new TownCenter(x, y); break;
                 case BuildingType.Barracks: building = new Barracks(x, y); break;
-                case BuildingType.Farm: building = new Farm(x, y); break;
+                case BuildingType.House:
+                    building = new House(x, y);
+                    this.state.population.max += 5;
+                    break;
+                case BuildingType.Tower: building = new Tower(x, y); break;
+                case BuildingType.Wall:
+                    // Should be handled by drag, but if single click:
+                    building = new Wall(x, y);
+                    break;
                 default: return;
             }
 
             this.state.addEntity(building);
 
             // Exit placement mode unless Shift is held
-            if (!this.input.isKeyPressed('ShiftLeft')) {
+            if (this.placementBuildingType !== BuildingType.Wall && !this.input.isKeyPressed('ShiftLeft')) {
                 this.cancelPlacement();
             }
         } else {
@@ -105,7 +133,49 @@ export class Game {
         }
     }
 
+    private placeWallSegment(x1: number, y1: number, x2: number, y2: number) {
+        // Simple linear interpolation
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const wallSize = 32; // Size of wall
+        const count = Math.ceil(dist / wallSize);
+
+        const costPerWall = BuildingCosts[BuildingType.Wall];
+        const totalCost = {
+            gold: costPerWall.gold * count,
+            wood: costPerWall.wood * count,
+            food: costPerWall.food * count,
+            stone: costPerWall.stone * count
+        };
+
+        if (this.state.resources.gold >= totalCost.gold &&
+            this.state.resources.wood >= totalCost.wood &&
+            this.state.resources.food >= totalCost.food &&
+            this.state.resources.stone >= totalCost.stone) {
+
+            this.state.resources.gold -= totalCost.gold;
+            this.state.resources.wood -= totalCost.wood;
+            this.state.resources.food -= totalCost.food;
+            this.state.resources.stone -= totalCost.stone;
+
+            for (let i = 0; i < count; i++) {
+                const t = i / count;
+                const wx = x1 + dx * t;
+                const wy = y1 + dy * t;
+                this.state.addEntity(new Wall(wx, wy));
+            }
+        } else {
+            console.log("Not enough resources for wall!");
+        }
+    }
+
     trainUnit(building: Building, unitType: UnitType) {
+        if (this.state.population.current >= this.state.population.max) {
+            console.log("Population limit reached!");
+            return;
+        }
+
         const cost = UnitCosts[unitType];
 
         if (this.state.resources.gold >= cost.gold &&
@@ -115,6 +185,22 @@ export class Game {
             this.state.resources.gold -= cost.gold;
             this.state.resources.wood -= cost.wood;
             this.state.resources.food -= cost.food;
+
+            // Pop Logic will be handled when unit actually spawns? 
+            // Or reserve it now? Usually reserve. 
+            // But `building.queueUnit` is just queue logic.
+            // If we reserve now, we should inc pop. If we wait, we check then.
+            // Typical RTS: Reserve cost immediately. Pop space is usually checked at start of queue or end.
+            // Let's increment pop immediately to be safe for now, assuming 100% training success.
+            // Wait, if it's queued, it takes time. 
+            // Let's simplified: Check valid now. Add to pending? 
+            // Simplest: `population.current++` when the unit is CREATED (spawned).
+            // So we need to modify where the unit is spawned. 
+            // `Building.ts` handles spawning. `Game.ts` just queues.
+            // So we pass the check here, but the increment happens in `Building.update`?
+            // Actually, we can just increment it here and decrement if cancelled.
+            // Let's implement: Inc Pop Here. 
+            this.state.population.current++;
 
             building.queueUnit(unitType);
             console.log(`Queued ${unitType} at ${building.type}`);
@@ -131,17 +217,43 @@ export class Game {
         if (this.input.isKeyPressed('KeyA') || this.input.isKeyPressed('ArrowLeft')) this.camera.move(-speed, 0);
         if (this.input.isKeyPressed('KeyD') || this.input.isKeyPressed('ArrowRight')) this.camera.move(speed, 0);
 
+        // Escape to Deselect / Cancel
+        if (this.input.isKeyPressed('Escape')) {
+            if (this.placementMode) {
+                this.cancelPlacement();
+            } else {
+                this.state.clearSelection();
+            }
+        }
+
+        // Mouse Click Latch (Simple "Just Pressed" detection)
+        const isClick = !this.wasMouseDown && this.input.isMouseDown;
+        this.wasMouseDown = this.input.isMouseDown;
+
         // Update Game State
         const collisionMap = this.getCollisionMap();
         this.state.update(deltaTime, collisionMap);
 
         // Interaction
-        if (this.input.isMouseDown) { // Left Click
+        if (isClick) { // Left Click (Fresh press)
             const worldX = this.input.mousePos.x + this.camera.x;
             const worldY = this.input.mousePos.y + this.camera.y;
 
             if (this.placementMode && this.placementBuildingType) {
-                this.placeBuilding(worldX, worldY);
+                if (this.placementBuildingType === BuildingType.Wall) {
+                    if (!this.placementStart) {
+                        this.placementStart = { x: worldX, y: worldY };
+                    } else {
+                        // Place wall from Start to Current
+                        this.placeWallSegment(this.placementStart.x, this.placementStart.y, worldX, worldY);
+                        this.placementStart = null;
+                        if (!this.input.isKeyPressed('ShiftLeft')) {
+                            this.cancelPlacement();
+                        }
+                    }
+                } else {
+                    this.placeBuilding(worldX, worldY);
+                }
             } else {
                 // Select
                 const clicked = this.state.entities.find(e => e.contains(worldX, worldY));
@@ -203,9 +315,8 @@ export class Game {
         const map: boolean[][] = Array(width).fill(false).map(() => Array(height).fill(false));
 
         this.state.entities.forEach(e => {
-            // Only Buildings and Resources block path
-            // Units don't strictly block in this simple RTS (usually soft collision or ignored)
-            if (e instanceof Building || e instanceof ResourceNode) {
+            // Only Buildings block path (Resources are now walkable to allow close gathering)
+            if (e instanceof Building) {
                 const startX = Math.floor(e.position.x / gridSize);
                 const startY = Math.floor(e.position.y / gridSize);
                 const endX = Math.floor((e.position.x + e.size) / gridSize);

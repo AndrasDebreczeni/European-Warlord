@@ -3,7 +3,7 @@ import { BuildingType, BuildingCosts } from '../engine/data/BuildingRules';
 
 interface BuildingMenuProps {
     onBuild: (type: BuildingType) => void;
-    resources: { gold: number; wood: number; food: number };
+    resources: { gold: number; wood: number; food: number; stone: number };
 }
 
 export const BuildingMenu: React.FC<BuildingMenuProps> = ({ onBuild, resources }) => {
@@ -12,7 +12,7 @@ export const BuildingMenu: React.FC<BuildingMenuProps> = ({ onBuild, resources }
             {Object.keys(BuildingCosts).map((key) => {
                 const type = key as BuildingType;
                 const cost = BuildingCosts[type];
-                const canAfford = resources.gold >= cost.gold && resources.wood >= cost.wood && resources.food >= cost.food;
+                const canAfford = resources.gold >= cost.gold && resources.wood >= cost.wood && resources.food >= cost.food && resources.stone >= cost.stone;
 
                 return (
                     <button
@@ -20,8 +20,8 @@ export const BuildingMenu: React.FC<BuildingMenuProps> = ({ onBuild, resources }
                         onClick={() => onBuild(type)}
                         disabled={!canAfford}
                         className={`flex flex-col items-center p-2 rounded border ${canAfford
-                                ? 'bg-slate-700 hover:bg-slate-600 border-slate-500 text-white'
-                                : 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
+                            ? 'bg-slate-700 hover:bg-slate-600 border-slate-500 text-white'
+                            : 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
                             }`}
                     >
                         <span className="font-bold text-sm">{type}</span>
@@ -29,6 +29,7 @@ export const BuildingMenu: React.FC<BuildingMenuProps> = ({ onBuild, resources }
                             {cost.gold > 0 && <span className="text-yellow-400">G:{cost.gold}</span>}
                             {cost.wood > 0 && <span className="text-amber-600">W:{cost.wood}</span>}
                             {cost.food > 0 && <span className="text-red-400">F:{cost.food}</span>}
+                            {cost.stone > 0 && <span className="text-stone-400">S:{cost.stone}</span>}
                         </div>
                     </button>
                 );

@@ -8,6 +8,11 @@ export interface Resources {
     stone: number;
 }
 
+export interface Population {
+    current: number;
+    max: number;
+}
+
 export class GameState {
     resources: Resources = {
         gold: 1000,
@@ -15,6 +20,11 @@ export class GameState {
         food: 1000,
         iron: 1000,
         stone: 1000
+    };
+
+    population: Population = {
+        current: 0,
+        max: 5
     };
 
     entities: Entity[] = [];

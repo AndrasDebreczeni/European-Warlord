@@ -4,5 +4,7 @@ export * from './Building';
 export * from './ResourceNode';
 export * from './TownCenter';
 export * from './Barracks';
-export * from './Farm';
+export * from './House';
+export * from './Tower';
+export * from './Wall';
 export * from './Projectile';
