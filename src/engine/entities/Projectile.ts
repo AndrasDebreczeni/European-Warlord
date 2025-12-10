@@ -32,6 +32,7 @@ export class Projectile extends Entity {
             const targetArmor = (this.target as any)['armor'] || 0;
             const finalDamage = Math.max(1, this.damage - targetArmor);
             this.target.health -= finalDamage;
+            this.target.hitTimer = 0.1;
             console.log(`Projectile hit ${this.target.type} for ${finalDamage} damage`);
             gameState.removeEntity(this.id);
         } else {

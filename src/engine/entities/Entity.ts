@@ -19,6 +19,7 @@ export abstract class Entity {
 
     health: number = 100;
     maxHealth: number = 100;
+    hitTimer: number = 0;
 
     constructor(x: number, y: number) {
         this.id = crypto.randomUUID();
@@ -28,8 +29,10 @@ export abstract class Entity {
     abstract type: EntityType;
 
     // Update now takes GameState as context (using any to avoid circular import for now, or use interface)
-    update(_deltaTime: number, _gameState: any): void {
-        // Base update logic
+    update(deltaTime: number, _gameState: any, _collisionMap?: boolean[][]): void {
+        if (this.hitTimer > 0) {
+            this.hitTimer -= deltaTime;
+        }
     }
 
     // Simple AABB collision check

@@ -23,6 +23,12 @@ export class Building extends Entity {
     update(deltaTime: number, gameState: any): void {
         // super.update(deltaTime, gameState); // Building entity might not have move logic
 
+        // Check Death
+        if (this.health <= 0) {
+            gameState.removeEntity(this.id);
+            return;
+        }
+
         if (this.productionQueue.length > 0) {
             const currentUnit = this.productionQueue[0];
             const cost = UnitCosts[currentUnit];

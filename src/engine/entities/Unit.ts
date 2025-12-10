@@ -3,6 +3,7 @@ import { ResourceNode, ResourceType } from './ResourceNode';
 import { TownCenter } from './TownCenter';
 import { UnitType, UnitStats } from '../data/UnitRules';
 import { Projectile } from './Projectile';
+import { Pathfinder } from '../Pathfinder';
 
 export enum UnitState {
     Idle,
@@ -20,6 +21,7 @@ export class Unit extends Entity {
     path: Vector2[] = [];
     targetPos: Vector2 | null = null;
     targetEntity: Entity | null = null;
+    lastGatherTarget: ResourceNode | null = null; // Remember what we were harvesting
 
     state: UnitState = UnitState.Idle;
 
@@ -68,31 +70,63 @@ export class Unit extends Entity {
         }
     }
 
+    setPath(path: Vector2[]) {
+        this.path = path;
+        // Prune first node if too close (prevents backtracking to center of current tile)
+        if (this.path.length > 0) {
+            const first = this.path[0];
+            const dist = Math.sqrt(Math.pow(first.x - this.position.x, 2) + Math.pow(first.y - this.position.y, 2));
+            if (dist < 16) { // Half of new gridSize (32)
+                this.path.shift();
+            }
+        }
+
+        if (this.path.length > 0) {
+            this.targetPos = this.path[0];
+            this.state = UnitState.Moving;
+        } else {
+            this.state = UnitState.Idle; // No path
+        }
+    }
+
     moveTo(x: number, y: number) {
+        // Fallback or direct move (used for short distances or if pathfinding fails? or maybe deprecated?)
+        // Let's keep it but it might be overridden by setPath usage in Game.ts
         this.targetPos = { x, y };
+        this.path = []; // Clear path if manual move
         this.targetEntity = null;
         this.state = UnitState.Moving;
     }
 
     gather(resource: ResourceNode) {
+        if (this.unitType !== UnitType.Villager) return;
         this.targetEntity = resource;
-        this.targetPos = { x: resource.position.x, y: resource.position.y };
+        this.lastGatherTarget = resource;
+        // Ideally we pathfind to resource
+        // this.targetPos = { x: resource.position.x, y: resource.position.y }; 
+        // Logic handled in Game.ts now preferably? 
+        // For now, keep simple behavior or let Game.ts set path
         this.state = UnitState.Moving;
     }
 
     attackEntity(target: Entity) {
         this.targetEntity = target;
-        // Don't set static targetPos, we will update it in loop
         this.state = UnitState.Attacking;
     }
 
     returnResources(dropOffTarget: Entity) {
         this.targetEntity = dropOffTarget;
-        this.targetPos = { x: dropOffTarget.position.x, y: dropOffTarget.position.y };
+        // this.targetPos = ... // Handled by Game.ts pathfinding usually?
         this.state = UnitState.Returning;
     }
 
-    update(deltaTime: number, gameState: any) {
+    update(deltaTime: number, gameState: any, collisionMap?: boolean[][]) {
+        // Check Death
+        if (this.health <= 0) {
+            gameState.removeEntity(this.id);
+            return;
+        }
+
         // Combat Timer
         if (this.attackTimer > 0) {
             this.attackTimer -= deltaTime;
@@ -115,6 +149,7 @@ export class Unit extends Entity {
                 if (dist <= attackRange) {
                     // In Range
                     this.targetPos = null; // Stop moving
+                    this.path = []; // Clear path
 
                     if (this.attackTimer <= 0) {
                         this.attackTimer = this.attackCooldown;
@@ -127,12 +162,13 @@ export class Unit extends Entity {
                             const targetArmor = (this.targetEntity as any)['armor'] || 0;
                             const damage = Math.max(1, this.attack - targetArmor);
                             this.targetEntity.health -= damage;
+                            this.targetEntity.hitTimer = 0.1;
                             console.log(`${this.unitType} dealt ${damage} to ${this.targetEntity.type}`);
                         }
                     }
                 } else {
                     // Chase
-                    // Move towards target
+                    // Move towards target (Direct chase, no pathfinding usually for dynamic targets unless re-pathed often)
                     const moveX = (dx / dist) * this.speed * deltaTime;
                     const moveY = (dy / dist) * this.speed * deltaTime;
                     this.position.x += moveX;
@@ -141,33 +177,57 @@ export class Unit extends Entity {
             }
         }
 
-        // Movement Logic (Standard Move)
-        if (this.state === UnitState.Moving && this.targetPos) {
-            const dx = this.targetPos.x - this.position.x;
-            const dy = this.targetPos.y - this.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            const arrivalThreshold = 5;
+        // Movement Logic (Path Following)
+        // Allow movement for Moving, Gathering (moving to resource), Returning
+        if ((this.state === UnitState.Moving || this.state === UnitState.Returning || this.state === UnitState.Gathering) && (this.targetPos || this.path.length > 0)) {
+            // Ensure we have a targetPos
+            if (!this.targetPos && this.path.length > 0) {
+                this.targetPos = this.path[0];
+            }
 
-            if (dist < arrivalThreshold) {
-                this.position.x = this.targetPos.x;
-                this.position.y = this.targetPos.y;
+            if (this.targetPos) {
+                const dx = this.targetPos.x - this.position.x;
+                const dy = this.targetPos.y - this.position.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
 
-                // If simple move, we are done
-                if (!this.targetEntity) {
-                    this.state = UnitState.Idle;
-                    this.targetPos = null;
-                } else {
-                    // Interaction Arrival
-                    if (this.targetEntity instanceof ResourceNode) {
-                        this.state = UnitState.Gathering;
+                const arrivalThreshold = 5;
+
+                if (dist < arrivalThreshold) {
+                    this.position.x = this.targetPos.x;
+                    this.position.y = this.targetPos.y;
+
+                    // Arrived at current waypoint
+                    if (this.path.length > 0) {
+                        this.path.shift(); // Remove current
+                        if (this.path.length > 0) {
+                            this.targetPos = this.path[0]; // Next
+                            // Continue moving in next frame
+                        } else {
+                            // Path Complete
+                            this.targetPos = null;
+                        }
+                    } else {
+                        this.targetPos = null;
                     }
+
+                    // If effectively done
+                    if (!this.targetPos) {
+                        if (this.targetEntity) {
+                            if (this.targetEntity instanceof ResourceNode) {
+                                this.state = UnitState.Gathering;
+                            }
+                            // returning logic is handled in its own state block
+                        } else {
+                            this.state = UnitState.Idle; // Done moving
+                        }
+                    }
+                } else {
+                    const moveX = (dx / dist) * this.speed * deltaTime;
+                    const moveY = (dy / dist) * this.speed * deltaTime;
+                    this.position.x += moveX;
+                    this.position.y += moveY;
                 }
-            } else {
-                const moveX = (dx / dist) * this.speed * deltaTime;
-                const moveY = (dy / dist) * this.speed * deltaTime;
-                this.position.x += moveX;
-                this.position.y += moveY;
             }
         }
 
@@ -201,6 +261,12 @@ export class Unit extends Entity {
                         });
 
                         this.returnResources(closest);
+
+                        // Calculate path to return immediately if map is available
+                        if (collisionMap) {
+                            const path = Pathfinder.findPath(this.position, closest.position, collisionMap);
+                            this.setPath(path);
+                        }
                     } else {
                         this.state = UnitState.Idle; // No dropoff
                     }
@@ -209,39 +275,80 @@ export class Unit extends Entity {
         }
 
         // Returning Logic
-        if (this.state === UnitState.Returning && this.targetEntity && this.targetPos) {
-            // Move logic handles getting there (see above, actually wait... I separated normal move logic)
-            // My previous Move logic handled ALL movement including Returning. 
-            // I need to make sure Returning state also processes movement.
+        if (this.state === UnitState.Returning && this.targetEntity) {
+            // If we don't have a path/targetPos, try to find one
+            if ((!this.path || this.path.length === 0) && !this.targetPos && collisionMap) {
+                const path = Pathfinder.findPath(this.position, this.targetEntity.position, collisionMap);
+                this.setPath(path);
+            }
 
-            // Re-using the movement block above is tricky if I hardcoded state checks.
-            // Let's duplicate simple move logic or consolidate.
-
-            const dx = this.targetPos.x - this.position.x;
-            const dy = this.targetPos.y - this.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 5) {
-                // Arrived at Town Center
-                if (this.carriedResourceType !== null) {
-                    switch (this.carriedResourceType) {
-                        case ResourceType.Gold: gameState.resources.gold += this.currentLoad; break;
-                        case ResourceType.Wood: gameState.resources.wood += this.currentLoad; break;
-                        case ResourceType.Food: gameState.resources.food += this.currentLoad; break;
-                    }
-                    console.log(`Deposited ${this.currentLoad}!`);
-                }
-
-                this.currentLoad = 0;
-                this.carriedResourceType = null;
-                this.state = UnitState.Idle; // Or back to harvesting? For now Idle.
-                this.targetPos = null;
-                this.targetEntity = null;
+            // Re-use logic for path following if we have a path
+            if (this.path.length > 0 || this.targetPos) {
+                // This falls through to the Movement Logic block above because state is Returning?
+                // No, Movement Logic block checks `this.state === UnitState.Moving`.
+                // I should change that check to include `Returning`.
             } else {
-                const moveX = (dx / dist) * this.speed * deltaTime;
-                const moveY = (dy / dist) * this.speed * deltaTime;
-                this.position.x += moveX;
-                this.position.y += moveY;
+                // Fallback: Update targetPos to closest point for the main movement logic to use
+                const target = this.targetEntity;
+                const closestX = Math.max(target.position.x, Math.min(this.position.x, target.position.x + target.size));
+                const closestY = Math.max(target.position.y, Math.min(this.position.y, target.position.y + target.size));
+                this.targetPos = { x: closestX, y: closestY };
+
+                // Logic for arrival
+                const dx = this.targetPos.x - this.position.x;
+                const dy = this.targetPos.y - this.position.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // AABB Check with buffer
+                const buffer = 5; // Reach distance
+                const touching =
+                    this.position.x < target.position.x + target.size + buffer &&
+                    this.position.x + this.size > target.position.x - buffer &&
+                    this.position.y < target.position.y + target.size + buffer &&
+                    this.position.y + this.size > target.position.y - buffer;
+
+                // Debugging
+                // console.log(`Returning: Dist=${dist.toFixed(1)}, Touching=${touching}, Pos=(${this.position.x.toFixed(0)},${this.position.y.toFixed(0)}) Target=(${target.position.x},${target.position.y})`);
+
+                if (touching || dist < 5) {
+                    // Arrived at Town Center
+                    if (this.carriedResourceType !== null) {
+                        switch (this.carriedResourceType) {
+                            case ResourceType.Gold: gameState.resources.gold += this.currentLoad; break;
+                            case ResourceType.Wood: gameState.resources.wood += this.currentLoad; break;
+                            case ResourceType.Food: gameState.resources.food += this.currentLoad; break;
+                            case ResourceType.Iron: gameState.resources.iron += this.currentLoad; break;
+                            case ResourceType.Stone: gameState.resources.stone += this.currentLoad; break;
+                        }
+                        console.log(`Deposited ${this.currentLoad}!`);
+                    }
+
+                    this.currentLoad = 0;
+                    this.carriedResourceType = null;
+
+                    // Return to work!
+                    if (this.lastGatherTarget && this.lastGatherTarget.amount > 0) {
+                        this.gather(this.lastGatherTarget);
+                        // Need to calculate path back!
+                        if (collisionMap) {
+                            const path = Pathfinder.findPath(this.position, this.lastGatherTarget.position, collisionMap);
+                            if (path.length > 0) {
+                                this.setPath(path);
+                            } else {
+                                console.log("No path found back to resource");
+                                this.state = UnitState.Idle;
+                                this.lastGatherTarget = null;
+                            }
+                        }
+                    } else {
+                        this.state = UnitState.Idle;
+                        this.targetPos = null;
+                        this.targetEntity = null;
+                        this.lastGatherTarget = null;
+                    }
+                }
+                // Else: Do NOTHING here. Let the Movement Logic block (above) handle the movement to `this.targetPos`.
+                // We successfully updated `this.targetPos` at the start of this block.
             }
         }
     }

@@ -4,13 +4,17 @@ export interface Resources {
     gold: number;
     wood: number;
     food: number;
+    iron: number;
+    stone: number;
 }
 
 export class GameState {
     resources: Resources = {
         gold: 1000,
         wood: 1000,
-        food: 1000
+        food: 1000,
+        iron: 1000,
+        stone: 1000
     };
 
     entities: Entity[] = [];
@@ -27,9 +31,18 @@ export class GameState {
         this.selection = this.selection.filter(selId => selId !== id);
     }
 
-    update(deltaTime: number) {
+    update(deltaTime: number, collisionMap?: boolean[][]) {
         // Pass self to entities so they can query game state (e.g. find TownCenter)
-        this.entities.forEach(entity => entity.update(deltaTime, this));
+        this.entities.forEach(entity => entity.update(deltaTime, this, collisionMap));
+
+        // Cleanup Depleted Resources
+        // We iterate backwards or use filter to safely remove
+        this.entities = this.entities.filter(e => {
+            if (e.type === 2) { // Resource
+                return (e as any).amount > 0;
+            }
+            return true;
+        });
     }
 
     // Selection Logic

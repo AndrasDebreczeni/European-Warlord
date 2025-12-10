@@ -59,6 +59,57 @@ export class Renderer {
         this._ctx.fillText(text, screenX, screenY);
     }
 
+    drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, type: number) {
+        // ResourceType: Gold=0, Wood=1, Food=2, Iron=3, Stone=4
+        switch (type) {
+            case 1: // Wood
+                // Trunk
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(x + size * 0.4, y + size * 0.6, size * 0.2, size * 0.4);
+                // Leaves
+                ctx.fillStyle = '#166534';
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size * 0.4, size * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 4: // Stone
+                ctx.fillStyle = '#57534e';
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 0: // Gold
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(x + size * 0.3, y + size * 0.7, size * 0.2, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.7, y + size * 0.7, size * 0.2, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.5, y + size * 0.4, size * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 2: // Food
+                ctx.fillStyle = '#4d7c0f'; // Green bush
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                // Berries
+                ctx.fillStyle = '#dc2626';
+                ctx.beginPath();
+                ctx.arc(x + size * 0.3, y + size * 0.3, size * 0.1, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.7, y + size * 0.4, size * 0.1, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.5, y + size * 0.7, size * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 3: // Iron
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillRect(x + size * 0.2, y + size * 0.2, size * 0.6, size * 0.6);
+                break;
+            default:
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x, y, size, size);
+                break;
+        }
+    }
+
     drawEntity(entity: any) { // Using any for now to avoid circular dependency issues if strict
         const screenX = entity.position.x - this.camera.x;
         const screenY = entity.position.y - this.camera.y;
@@ -67,6 +118,21 @@ export class Renderer {
         if (screenX + entity.size < 0 || screenX > this.camera.width ||
             screenY + entity.size < 0 || screenY > this.camera.height) {
             return;
+        }
+
+        if (entity.hitTimer && entity.hitTimer > 0) {
+            this._ctx.fillStyle = '#ffffff';
+            this._ctx.fillRect(screenX, screenY, entity.size, entity.size);
+            return;
+        }
+
+        // Custom Resource Rendering
+        if (entity.type === 2) { // EntityType.Resource
+            const rType = (entity as any).resourceType;
+            if (rType !== undefined) {
+                this.drawResource(this._ctx, screenX, screenY, entity.size, rType);
+                return;
+            }
         }
 
         this._ctx.fillStyle = entity.color;

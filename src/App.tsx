@@ -4,12 +4,16 @@ import { BuildingMenu } from './components/BuildingMenu'
 import { ProductionMenu } from './components/ProductionMenu'
 import { BuildingType } from './engine/data/BuildingRules'
 import { Building } from './engine/entities/Building'
+import { Unit } from './engine/entities/Unit'
+import { UnitInfoPanel } from './components/UnitInfoPanel'
+import { Minimap } from './components/Minimap'
 
 function App() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const gameRef = useRef<Game | null>(null)
-    const [resources, setResources] = useState({ gold: 0, wood: 0, food: 0 })
+    const [resources, setResources] = useState({ gold: 0, wood: 0, food: 0, iron: 0, stone: 0 })
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null)
+    const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null)
 
     useEffect(() => {
         if (!canvasRef.current) return
@@ -37,11 +41,17 @@ function App() {
                     const entity = gameRef.current.state.entities.find(e => e.id === id)
                     if (entity && entity instanceof Building) {
                         setSelectedBuilding(entity)
+                        setSelectedUnit(null)
+                    } else if (entity && entity instanceof Unit) {
+                        setSelectedUnit(entity)
+                        setSelectedBuilding(null)
                     } else {
                         setSelectedBuilding(null)
+                        setSelectedUnit(null)
                     }
                 } else {
                     setSelectedBuilding(null)
+                    setSelectedUnit(null)
                 }
             }
             animationFrameId = requestAnimationFrame(syncUI)
@@ -84,6 +94,14 @@ function App() {
                     <span className="text-red-400 font-bold">Food:</span>
                     <span>{Math.floor(resources.food)}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-slate-400 font-bold">Iron:</span>
+                    <span>{Math.floor(resources.iron)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-stone-400 font-bold">Stone:</span>
+                    <span>{Math.floor(resources.stone)}</span>
+                </div>
             </div>
 
             {/* Bottom Left - Build Menu */}
@@ -100,12 +118,29 @@ function App() {
                 />
             )}
 
-            {/* Help Text */}
-            <div className="absolute top-2 right-2 text-xs text-slate-500 pointer-events-none">
-                <p>WASD / Arrows to Move Camera</p>
-                <p>Left Click to Select / Place</p>
-                <p>Right Click to Move / Gather</p>
-            </div>
+            {/* Unit Info Panel */}
+            {selectedUnit && (
+                <UnitInfoPanel entity={selectedUnit} />
+            )}
+            {/* Also show for generic Entity selection (e.g. Resources) if Unit is not selected but something else is */}
+            {!selectedUnit && gameRef.current && gameRef.current.state.selection.length === 1 && (
+                /* We need to extract the entity from game state since we don't have a state var for 'selectedEntity' other than building/unit split. 
+                   Let's check if we can just use a helper or temporary state in App? 
+                   Actually, let's just create a generic selectedEntity state to simplify. for now, let's just make it work with what we have. */
+                (() => {
+                    const id = gameRef.current.state.selection[0];
+                    const ent = gameRef.current.state.entities.find(e => e.id === id);
+                    if (ent && !(ent instanceof Unit) && !(ent instanceof Building)) {
+                        return <UnitInfoPanel entity={ent} />;
+                    }
+                    return null;
+                })()
+            )}
+
+            {/* Minimap (Replaces Help Text) */}
+            {gameRef.current && (
+                <Minimap game={gameRef.current} />
+            )}
         </div>
     )
 }
