@@ -6,6 +6,7 @@ import { Entity, Unit, ResourceNode, ResourceType, TownCenter, Barracks, House, 
 import { BuildingType, BuildingStats, BuildingCosts } from './data/BuildingRules';
 import { UnitType, UnitCosts } from './data/UnitRules';
 import { Pathfinder } from './Pathfinder';
+import { ImageLoader } from './ImageLoader';
 
 export class Game {
     loop: GameLoop;
@@ -13,6 +14,7 @@ export class Game {
     renderer: Renderer;
     camera: Camera;
     state: GameState;
+    imageLoader: typeof ImageLoader;
 
 
 
@@ -28,6 +30,14 @@ export class Game {
         this.input = new InputHandler(canvas);
         this.state = new GameState();
         this.loop = new GameLoop(this.update, this.render);
+        this.imageLoader = ImageLoader;
+
+        // Load images
+        ImageLoader.loadAllAssets().then(() => {
+            console.log('All game assets loaded!');
+        }).catch(err => {
+            console.warn('Some assets failed to load:', err);
+        });
 
         // Add test unit
         const u = new Unit(100, 100);
@@ -42,7 +52,7 @@ export class Game {
         this.state.addEntity(new ResourceNode(700, 200, ResourceType.Food)); // Berry Bush?
 
         // Add Town Center
-        this.state.addEntity(new TownCenter(50, 250));
+        this.state.addEntity(new TownCenter(400, 250));
 
         // Handle resize
         const resize = () => {
@@ -353,23 +363,10 @@ export class Game {
 
         // Draw Entities
         this.state.entities.forEach(entity => {
-            this.renderer.drawEntity(entity);
+            this.renderer.drawEntity(entity, this.imageLoader);
         });
 
-        // Draw selection outlines
-        this.state.selection.forEach(id => {
-            const entity = this.state.entities.find(e => e.id === id);
-            if (entity) {
-                this.renderer.drawRect(
-                    entity.position.x - 2,
-                    entity.position.y - 2,
-                    entity.size + 4,
-                    entity.size + 4,
-                    '#00ff00',
-                    true
-                );
-            }
-        });
+        // Draw selection outlines are now handled in Renderer.drawEntity()
 
         // Render Placement Ghost
         if (this.placementMode && this.placementBuildingType) {

@@ -37,11 +37,15 @@ export abstract class Entity {
 
     // Simple AABB collision check
     contains(x: number, y: number): boolean {
+        // If entity has scaled sprite, use the larger hitbox
+        const size = (this as any)._renderSize || this.size;
+        const offset = (this as any)._renderOffset || 0;
+
         return (
-            x >= this.position.x &&
-            x <= this.position.x + this.size &&
-            y >= this.position.y &&
-            y <= this.position.y + this.size
+            x >= this.position.x - offset &&
+            x <= this.position.x - offset + size &&
+            y >= this.position.y - offset &&
+            y <= this.position.y - offset + size
         );
     }
 }

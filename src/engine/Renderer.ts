@@ -110,7 +110,7 @@ export class Renderer {
         }
     }
 
-    drawEntity(entity: any) { // Using any for now to avoid circular dependency issues if strict
+    drawEntity(entity: any, imageLoader?: any) { // Using any for now to avoid circular dependency issues if strict
         const screenX = entity.position.x - this.camera.x;
         const screenY = entity.position.y - this.camera.y;
 
@@ -135,21 +135,79 @@ export class Renderer {
             }
         }
 
-        this._ctx.fillStyle = entity.color;
-        this._ctx.fillRect(screenX, screenY, entity.size, entity.size);
+        // Try to draw sprite if available
+        let spriteDrawn = false;
+        if (imageLoader) {
+            let spriteName: string | null = null;
+
+            // Determine sprite name based on entity type
+            if (entity.buildingType) {
+                // It's a building
+                const buildingTypeMap: { [key: string]: string } = {
+                    'Town Center': 'town_center',
+                    'Barracks': 'barracks',
+                    'House': 'house',
+                    'Tower': 'tower',
+                    'Wall': 'wall'
+                };
+                spriteName = buildingTypeMap[entity.buildingType] || null;
+            } else if (entity.unitType) {
+                // It's a unit
+                const unitTypeMap: { [key: string]: string } = {
+                    'Villager': 'villager',
+                    'Swordsman': 'swordsman',
+                    'Archer': 'archer',
+                    'Knight': 'knight',
+                    'Lancer': 'lancer',
+                    'Horse Archer': 'horse_archer',
+                    'Marauder': 'marauder',
+                    'Huscarl': 'huscarl',
+                    'Axethrower': 'axethrower',
+                    'Berserker': 'berserker'
+                };
+                spriteName = unitTypeMap[entity.unitType] || null;
+            }
+
+            if (spriteName) {
+                const sprite = imageLoader.getImage(spriteName);
+                if (sprite && sprite.complete) {
+                    // Scale sprites to be larger (4x the entity size)
+                    const spriteScale = 4.0;
+                    const renderSize = entity.size * spriteScale;
+                    const offset = (renderSize - entity.size) / 2;
+                    this._ctx.drawImage(sprite, screenX - offset, screenY - offset, renderSize, renderSize);
+                    spriteDrawn = true;
+
+                    // Store actual render size for selection box
+                    entity._renderSize = renderSize;
+                    entity._renderOffset = offset;
+                }
+            }
+        }
+
+        // Fallback to colored rectangle if no sprite
+        if (!spriteDrawn) {
+            this._ctx.fillStyle = entity.color;
+            this._ctx.fillRect(screenX, screenY, entity.size, entity.size);
+        }
 
         if (entity.selected) {
             this._ctx.strokeStyle = '#00ff00';
             this._ctx.lineWidth = 2;
-            this._ctx.strokeRect(screenX, screenY, entity.size, entity.size);
+            // Use actual render size if sprite is being used
+            if (entity._renderSize && entity._renderOffset) {
+                this._ctx.strokeRect(screenX - entity._renderOffset, screenY - entity._renderOffset, entity._renderSize, entity._renderSize);
+            } else {
+                this._ctx.strokeRect(screenX, screenY, entity.size, entity.size);
+            }
         }
 
         // Draw Health Bar
         if (entity.maxHealth && entity.health < entity.maxHealth) {
-            const barWidth = entity.size;
+            const barWidth = entity._renderSize || entity.size;
             const barHeight = 4;
-            const barX = screenX;
-            const barY = screenY - 8;
+            const barX = entity._renderOffset ? screenX - entity._renderOffset : screenX;
+            const barY = entity._renderOffset ? screenY - entity._renderOffset - 8 : screenY - 8;
 
             // Background
             this._ctx.fillStyle = '#ef4444'; // Red-500
