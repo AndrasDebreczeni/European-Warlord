@@ -1,7 +1,34 @@
+interface SpriteBounds {
+    // Scale of actual visual content relative to full sprite size (0-1)
+    // e.g., 0.8 means 80% of sprite is visible content, 20% is transparent padding
+    contentScale: number;
+    // Optional offset from center if content is not centered in sprite
+    offsetX?: number; // -0.5 to 0.5 (as fraction of sprite size)
+    offsetY?: number; // -0.5 to 0.5 (as fraction of sprite size)
+}
+
 export class ImageLoader {
     private static images: Map<string, HTMLImageElement> = new Map();
     private static loadedCount: number = 0;
     private static totalCount: number = 0;
+
+    // Sprite bounds configuration - defines visible content area within each sprite
+    // Adjust these values to make selection boxes fit tighter or looser
+    private static spriteBounds: Map<string, SpriteBounds> = new Map([
+        // Buildings - typically have some padding around edges
+        ['town_center', { contentScale: 0.85, offsetY: -0.05 }],
+        ['barracks', { contentScale: 0.80 }],
+        ['house', { contentScale: 0.75 }],
+        ['tower', { contentScale: 0.75, offsetY: -0.05 }],
+        ['wall', { contentScale: 0.90 }],
+
+        // Resources - usually tighter sprites
+        ['gold', { contentScale: 0.85 }],
+        ['wood', { contentScale: 0.80, offsetY: -0.05 }],
+        ['stone', { contentScale: 0.85 }],
+        ['iron', { contentScale: 0.85 }],
+        ['farm', { contentScale: 0.80 }],
+    ]);
 
     static async loadImage(name: string, path: string): Promise<HTMLImageElement> {
         if (this.images.has(name)) {
@@ -11,11 +38,9 @@ export class ImageLoader {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                // Remove white/light backgrounds
-                const processedImg = this.removeBackground(img);
-                this.images.set(name, processedImg);
+                this.images.set(name, img);
                 this.loadedCount++;
-                resolve(processedImg);
+                resolve(img);
             };
             img.onerror = () => {
                 console.warn(`Failed to load image: ${path}`);
@@ -26,70 +51,22 @@ export class ImageLoader {
         });
     }
 
-    private static removeBackground(img: HTMLImageElement): HTMLImageElement {
-        // Create a canvas to process the image
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        // Draw the image
-        ctx.drawImage(img, 0, 0);
-
-        // Get image data
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // Extremely aggressive background removal for all light colors
-            const avg = (r + g + b) / 3;
-            const colorVariance = Math.max(Math.abs(r - avg), Math.abs(g - avg), Math.abs(b - avg));
-
-            // Remove backgrounds - catch white, cream, beige, tan, light brown, light gray
-            if (avg > 140) {
-                if (colorVariance < 30) {
-                    // Low variance = solid background color - remove completely
-                    data[i + 3] = 0;
-                } else if (colorVariance < 60 && avg > 160) {
-                    // Medium variance but still light - fade heavily
-                    data[i + 3] = Math.floor(data[i + 3] * 0.15);
-                } else if (avg > 190) {
-                    // Very light - reduce significantly
-                    data[i + 3] = Math.floor(data[i + 3] * 0.3);
-                }
-            }
-
-            // Special case: catch beige/tan (higher red/yellow, less blue)
-            if (r > 180 && g > 160 && b < 200 && b < g) {
-                data[i + 3] = Math.floor(data[i + 3] * 0.2);
-            }
-        }
-
-        // Put the modified data back
-        ctx.putImageData(imageData, 0, 0);
-
-        // Create a new image from the canvas
-        const processedImg = new Image();
-        processedImg.src = canvas.toDataURL();
-        return processedImg;
-    }
-
     static async loadAllAssets(): Promise<void> {
         const assetPath = '/assets/sprites';
 
         const assets = [
             // Buildings
-            { name: 'town_center', path: `${assetPath}/town_center_sprite_1765406456673.png` },
-            { name: 'barracks', path: `${assetPath}/barracks_sprite_1765406473381.png` },
-            { name: 'house', path: `${assetPath}/house_sprite_1765406487904.png` },
-            { name: 'tower', path: `${assetPath}/tower_sprite_1765406499947.png` },
-            { name: 'wall', path: `${assetPath}/wall_sprite_1765406514413.png` },
-            // Units
-            { name: 'villager', path: `${assetPath}/villager_sprite_1765406526812.png` },
+            { name: 'town_center', path: `${assetPath}/town_center.png` },
+            { name: 'barracks', path: `${assetPath}/barracks.png` },
+            { name: 'house', path: `${assetPath}/house.png` },
+            { name: 'tower', path: `${assetPath}/tower.png` },
+            { name: 'wall', path: `${assetPath}/wall.png` },
+            // Resources
+            { name: 'gold', path: `${assetPath}/gold.png` },
+            { name: 'wood', path: `${assetPath}/wood.png` },
+            { name: 'stone', path: `${assetPath}/stone.png` },
+            { name: 'iron', path: `${assetPath}/iron.png` },
+            { name: 'farm', path: `${assetPath}/farm.png` },
         ];
 
         const promises = assets.map(asset =>
@@ -108,5 +85,9 @@ export class ImageLoader {
 
     static isLoaded(): boolean {
         return this.loadedCount === this.totalCount;
+    }
+
+    static getSpriteBounds(name: string): SpriteBounds | null {
+        return this.spriteBounds.get(name) || null;
     }
 }

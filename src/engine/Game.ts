@@ -46,7 +46,16 @@ export class Game {
 
         // Add Resources
         this.state.addEntity(new ResourceNode(300, 300, ResourceType.Gold));
-        this.state.addEntity(new ResourceNode(400, 100, ResourceType.Wood));
+
+        // Spawn Wood Cluster
+        const woodStartX = 400;
+        const woodStartY = 100;
+        for (let i = 0; i < 10; i++) {
+            const offsetX = (Math.random() - 0.5) * 100;
+            const offsetY = (Math.random() - 0.5) * 100;
+            this.state.addEntity(new ResourceNode(woodStartX + offsetX, woodStartY + offsetY, ResourceType.Wood));
+        }
+
         this.state.addEntity(new ResourceNode(600, 400, ResourceType.Iron));
         this.state.addEntity(new ResourceNode(200, 600, ResourceType.Stone));
         this.state.addEntity(new ResourceNode(700, 200, ResourceType.Food)); // Berry Bush?
@@ -144,13 +153,17 @@ export class Game {
     }
 
     private placeWallSegment(x1: number, y1: number, x2: number, y2: number) {
-        // Simple linear interpolation
+        // Calculate angle and length
         const dx = x2 - x1;
         const dy = y2 - y1;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const wallSize = 32; // Size of wall
-        const count = Math.ceil(dist / wallSize);
+        const angle = Math.atan2(dy, dx);
 
+        // Ensure minimum length
+        const wallSize = 32;
+        if (dist < wallSize) return;
+
+        const count = Math.ceil(dist / wallSize); // Still use count for cost calculation
         const costPerWall = BuildingCosts[BuildingType.Wall];
         const totalCost = {
             gold: costPerWall.gold * count,
@@ -169,12 +182,11 @@ export class Game {
             this.state.resources.food -= totalCost.food;
             this.state.resources.stone -= totalCost.stone;
 
-            for (let i = 0; i < count; i++) {
-                const t = i / count;
-                const wx = x1 + dx * t;
-                const wy = y1 + dy * t;
-                this.state.addEntity(new Wall(wx, wy));
-            }
+            // Place single wall entity at midpoint
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+
+            this.state.addEntity(new Wall(midX, midY, dist, angle));
         } else {
             console.log("Not enough resources for wall!");
         }
@@ -325,17 +337,41 @@ export class Game {
         const map: boolean[][] = Array(width).fill(false).map(() => Array(height).fill(false));
 
         this.state.entities.forEach(e => {
-            // Only Buildings block path (Resources are now walkable to allow close gathering)
+            // Only Buildings block path
             if (e instanceof Building) {
-                const startX = Math.floor(e.position.x / gridSize);
-                const startY = Math.floor(e.position.y / gridSize);
-                const endX = Math.floor((e.position.x + e.size) / gridSize);
-                const endY = Math.floor((e.position.y + e.size) / gridSize);
+                if (e instanceof Wall) {
+                    // Rasterize rotated wall
+                    const wall = e as Wall;
+                    // Walk along the wall length and mark grid cells
+                    const dx = Math.cos(wall.rotation);
+                    const dy = Math.sin(wall.rotation);
 
-                for (let x = startX; x <= endX; x++) {
-                    for (let y = startY; y <= endY; y++) {
-                        if (x >= 0 && x < width && y >= 0 && y < height) {
-                            map[x][y] = true;
+                    // Start from one end (-length/2) to other end (+length/2) relative to center
+                    const halfLen = wall.length / 2;
+                    // const segments = Math.ceil(wall.length / gridSize); // Only check every grid size step
+
+                    for (let i = -halfLen; i <= halfLen; i += gridSize / 2) {
+                        const wx = wall.position.x + dx * i;
+                        const wy = wall.position.y + dy * i;
+
+                        const gx = Math.floor(wx / gridSize);
+                        const gy = Math.floor(wy / gridSize);
+
+                        if (gx >= 0 && gx < width && gy >= 0 && gy < height) {
+                            map[gx][gy] = true;
+                        }
+                    }
+                } else {
+                    const startX = Math.floor(e.position.x / gridSize);
+                    const startY = Math.floor(e.position.y / gridSize);
+                    const endX = Math.floor((e.position.x + e.size) / gridSize);
+                    const endY = Math.floor((e.position.y + e.size) / gridSize);
+
+                    for (let x = startX; x <= endX; x++) {
+                        for (let y = startY; y <= endY; y++) {
+                            if (x >= 0 && x < width && y >= 0 && y < height) {
+                                map[x][y] = true;
+                            }
                         }
                     }
                 }
@@ -348,18 +384,12 @@ export class Game {
     private render = () => {
         this.renderer.clear();
 
-        // Draw Grid
+        // Draw Grass Background
         const gridSize = 32;
         const mapWidth = 60; // 60x60 tiles
         const mapHeight = 60;
-
-        for (let x = 0; x < mapWidth; x++) {
-            for (let y = 0; y < mapHeight; y++) {
-                const color = (x + y) % 2 === 0 ? '#334155' : '#475569';
-                this.renderer.drawRect(x * gridSize, y * gridSize, gridSize, gridSize, color);
-                this.renderer.drawRect(x * gridSize, y * gridSize, gridSize, gridSize, '#1e293b', true);
-            }
-        }
+        const grassColor = '#4d7c0f'; // Grass green color
+        this.renderer.drawRect(0, 0, mapWidth * gridSize, mapHeight * gridSize, grassColor);
 
         // Draw Entities
         this.state.entities.forEach(entity => {

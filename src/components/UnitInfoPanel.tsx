@@ -1,4 +1,4 @@
-import { Entity, EntityType } from '../engine/entities/Entity';
+import { Entity } from '../engine/entities/Entity';
 import { Unit } from '../engine/entities/Unit';
 import { ResourceNode, ResourceType } from '../engine/entities/ResourceNode';
 

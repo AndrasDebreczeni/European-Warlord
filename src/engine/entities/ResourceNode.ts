@@ -14,14 +14,13 @@ export class ResourceNode extends Entity {
 
     constructor(x: number, y: number, public resourceType: ResourceType) {
         super(x, y);
-        this.size = 32;
         // Color based on type
         switch (resourceType) {
-            case ResourceType.Gold: this.color = '#fbbf24'; break; // Amber 400
-            case ResourceType.Wood: this.color = '#166534'; break; // Green 800
-            case ResourceType.Food: this.color = '#dc2626'; break; // Red 600
-            case ResourceType.Iron: this.color = '#94a3b8'; break; // Slate 400 (Iron)
-            case ResourceType.Stone: this.color = '#57534e'; break; // Stone 600
+            case ResourceType.Gold: this.color = '#fbbf24'; this.size = 32; break; // Amber 400
+            case ResourceType.Wood: this.color = '#166534'; this.size = 32; break; // Green 800
+            case ResourceType.Food: this.color = '#dc2626'; this.size = 64; break; // Red 600 (Farm)
+            case ResourceType.Iron: this.color = '#94a3b8'; this.size = 64; break; // Slate 400 (Iron)
+            case ResourceType.Stone: this.color = '#57534e'; this.size = 32; break; // Stone 600
         }
     }
 

@@ -59,8 +59,28 @@ export class Renderer {
         this._ctx.fillText(text, screenX, screenY);
     }
 
-    drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, type: number) {
+    drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, type: number, imageLoader?: any) {
         // ResourceType: Gold=0, Wood=1, Food=2, Iron=3, Stone=4
+        let spriteName: string | null = null;
+
+        switch (type) {
+            case 1: spriteName = 'wood'; break;
+            case 4: spriteName = 'stone'; break;
+            case 0: spriteName = 'gold'; break;
+            case 3: spriteName = 'iron'; break;
+            case 2: spriteName = 'farm'; break;
+        }
+
+        if (spriteName && imageLoader) {
+            const sprite = imageLoader.getImage(spriteName);
+            if (sprite && sprite.complete) {
+                // Draw resource sprite
+                ctx.drawImage(sprite, x, y, size, size);
+                return;
+            }
+        }
+
+        // Fallback or Food (2)
         switch (type) {
             case 1: // Wood
                 // Trunk
@@ -129,8 +149,65 @@ export class Renderer {
         // Custom Resource Rendering
         if (entity.type === 2) { // EntityType.Resource
             const rType = (entity as any).resourceType;
+            let spriteName: string | null = null;
             if (rType !== undefined) {
-                this.drawResource(this._ctx, screenX, screenY, entity.size, rType);
+                switch (rType) {
+                    case 1: spriteName = 'wood'; break;
+                    case 4: spriteName = 'stone'; break;
+                    case 0: spriteName = 'gold'; break;
+                    case 3: spriteName = 'iron'; break;
+                    case 2: spriteName = 'farm'; break;
+                }
+            }
+
+            if (spriteName && imageLoader) {
+                const sprite = imageLoader.getImage(spriteName);
+                if (sprite && sprite.complete) {
+                    const spriteScale = 3.0; // 2x bigger for resources
+                    const renderSize = entity.size * spriteScale;
+                    const offset = (renderSize - entity.size) / 2;
+                    this._ctx.drawImage(sprite, screenX - offset, screenY - offset, renderSize, renderSize);
+
+                    // Track render size for selection box
+                    entity._renderSize = renderSize;
+                    entity._renderOffset = offset;
+
+                    if (entity.selected) {
+                        this._ctx.strokeStyle = '#00ff00';
+                        this._ctx.lineWidth = 2;
+
+                        // Apply sprite bounds if available
+                        const bounds = spriteName && imageLoader ? imageLoader.getSpriteBounds(spriteName) : null;
+
+                        if (bounds) {
+                            const tightSize = renderSize * bounds.contentScale;
+                            const sizeDiff = renderSize - tightSize;
+                            const tightOffset = offset - sizeDiff / 2;
+
+                            const offsetXPx = (bounds.offsetX || 0) * renderSize;
+                            const offsetYPx = (bounds.offsetY || 0) * renderSize;
+
+                            this._ctx.strokeRect(
+                                screenX - tightOffset + offsetXPx,
+                                screenY - tightOffset + offsetYPx,
+                                tightSize,
+                                tightSize
+                            );
+                        } else {
+                            this._ctx.strokeRect(screenX - offset, screenY - offset, renderSize, renderSize);
+                        }
+                    }
+                    return;
+                }
+            }
+
+            if (rType !== undefined) {
+                this.drawResource(this._ctx, screenX, screenY, entity.size, rType, imageLoader);
+                if (entity.selected) {
+                    this._ctx.strokeStyle = '#00ff00';
+                    this._ctx.lineWidth = 2;
+                    this._ctx.strokeRect(screenX, screenY, entity.size, entity.size);
+                }
                 return;
             }
         }
@@ -154,7 +231,6 @@ export class Renderer {
             } else if (entity.unitType) {
                 // It's a unit
                 const unitTypeMap: { [key: string]: string } = {
-                    'Villager': 'villager',
                     'Swordsman': 'swordsman',
                     'Archer': 'archer',
                     'Knight': 'knight',
@@ -194,9 +270,57 @@ export class Renderer {
         if (entity.selected) {
             this._ctx.strokeStyle = '#00ff00';
             this._ctx.lineWidth = 2;
-            // Use actual render size if sprite is being used
-            if (entity._renderSize && entity._renderOffset) {
-                this._ctx.strokeRect(screenX - entity._renderOffset, screenY - entity._renderOffset, entity._renderSize, entity._renderSize);
+
+            // Use sprite bounds if available to fit actual visible content
+            if (entity._renderSize && entity._renderOffset && spriteDrawn) {
+                // Try to get sprite bounds configuration
+                let spriteName: string | null = null;
+                if (entity.buildingType) {
+                    const buildingTypeMap: { [key: string]: string } = {
+                        'Town Center': 'town_center',
+                        'Barracks': 'barracks',
+                        'House': 'house',
+                        'Tower': 'tower',
+                        'Wall': 'wall'
+                    };
+                    spriteName = buildingTypeMap[entity.buildingType] || null;
+                } else if (entity.unitType) {
+                    const unitTypeMap: { [key: string]: string } = {
+                        'Swordsman': 'swordsman',
+                        'Archer': 'archer',
+                        'Knight': 'knight',
+                        'Lancer': 'lancer',
+                        'Horse Archer': 'horse_archer',
+                        'Marauder': 'marauder',
+                        'Huscarl': 'huscarl',
+                        'Axethrower': 'axethrower',
+                        'Berserker': 'berserker'
+                    };
+                    spriteName = unitTypeMap[entity.unitType] || null;
+                }
+
+                const bounds = spriteName && imageLoader ? imageLoader.getSpriteBounds(spriteName) : null;
+
+                if (bounds) {
+                    // Calculate tight box based on content scale
+                    const tightSize = entity._renderSize * bounds.contentScale;
+                    const sizeDiff = entity._renderSize - tightSize;
+                    const tightOffset = entity._renderOffset - sizeDiff / 2;
+
+                    // Apply offset if content is not centered
+                    const offsetXPx = (bounds.offsetX || 0) * entity._renderSize;
+                    const offsetYPx = (bounds.offsetY || 0) * entity._renderSize;
+
+                    this._ctx.strokeRect(
+                        screenX - tightOffset + offsetXPx,
+                        screenY - tightOffset + offsetYPx,
+                        tightSize,
+                        tightSize
+                    );
+                } else {
+                    // Fallback to full sprite size
+                    this._ctx.strokeRect(screenX - entity._renderOffset, screenY - entity._renderOffset, entity._renderSize, entity._renderSize);
+                }
             } else {
                 this._ctx.strokeRect(screenX, screenY, entity.size, entity.size);
             }
@@ -204,10 +328,10 @@ export class Renderer {
 
         // Draw Health Bar
         if (entity.maxHealth && entity.health < entity.maxHealth) {
-            const barWidth = entity._renderSize || entity.size;
+            const barWidth = (entity._renderSize && spriteDrawn) ? entity._renderSize : entity.size;
             const barHeight = 4;
-            const barX = entity._renderOffset ? screenX - entity._renderOffset : screenX;
-            const barY = entity._renderOffset ? screenY - entity._renderOffset - 8 : screenY - 8;
+            const barX = (entity._renderOffset && spriteDrawn) ? screenX - entity._renderOffset : screenX;
+            const barY = (entity._renderOffset && spriteDrawn) ? screenY - entity._renderOffset - 8 : screenY - 8;
 
             // Background
             this._ctx.fillStyle = '#ef4444'; // Red-500

@@ -1,7 +1,6 @@
 import { Building } from './Building';
 import { BuildingType, BuildingStats } from '../data/BuildingRules';
-import { Entity, EntityType } from './Entity';
-import { Projectile } from './Projectile';
+import { EntityType } from './Entity';
 
 export class Tower extends Building {
     attackRange: number;
